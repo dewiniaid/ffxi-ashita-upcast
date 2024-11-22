@@ -1,40 +1,37 @@
-addon.name      = 'Upcast';
-addon.author    = 'Dewin';
-addon.version   = '1.0';
-addon.desc      = 'Automatically cast the highest currently known tier of the specified spell.';
+addon.name      = 'Upcast'
+addon.author    = 'Dewin'
+addon.version   = '1.1'
+addon.desc      = 'Automatically cast the highest currently known tier of the specified spell.'
 addon.link      = 'https://github.com/dewiniaid/ashita-upcast'  -- THIS LINK DOES NOT EXIST YET
 
-require('common');
-local chat = require('chat');
+require('common')
+local chat = require('chat')
 
 local spellData = require('spelldata')
 
 local function CheckLevels(resource)
-    local playMgr = AshitaCore:GetMemoryManager():GetPlayer();
-    local mainJob = playMgr:GetMainJob();
-    local mainJobLevel = playMgr:GetMainJobLevel();
-    local subJob = playMgr:GetSubJob();
-    local subJobLevel = playMgr:GetSubJobLevel();
+    local player = AshitaCore:GetMemoryManager():GetPlayer()
+    local mainJob = player:GetMainJob()
+    local mainJobLevel = player:GetMainJobLevel()
+    local subJob = player:GetSubJob()
+    local subJobLevel = player:GetSubJobLevel()
+    local jobMask = resource.JobPointMask  -- nil for /jas.
+    local levelRequired = resource.LevelRequired
 
-    local jobMask = resource.JobPointMask;
-    local levelRequired = resource.LevelRequired;
-
-    if bit.band(bit.rshift(jobMask, mainJob), 1) == 1 then
-        return (mainJobLevel == 99); --Assume player knows JP spells if 99
+    if jobMask and bit.band(bit.rshift(jobMask, mainJob), 1) == 1 then  -- /jas don't have JobPointMask
+        return (mainJobLevel == 99) --Assume player knows JP spells if 99
     elseif (levelRequired[mainJob + 1] ~= -1) and (mainJobLevel >= levelRequired[mainJob + 1]) then
-        return true;
+        return true
+    elseif jobMask and bit.band(bit.rshift(jobMask, subJob), 1) ~= 1 then
+        local level = levelRequired[subJob + 1]
+        return (level ~= -1) and (subJobLevel >= level)
     end
 
-    if bit.band(bit.rshift(jobMask, subJob), 1) ~= 1 then
-        local level = levelRequired[subJob + 1];        
-        return (level ~= -1) and (subJobLevel >= level);
-    end
-
-    return false;
+    return false
 end
 
 local function debug(msg)
-    -- print(chat.header('Upcast') .. chat.message(msg))
+    --print(chat.header('Upcast') .. chat.message(msg))
 end
 
 local function has_bit(a, b)
@@ -50,14 +47,14 @@ local function IsValidTarget(spell)
         return false
     end
     local myIndex = AshitaCore:GetMemoryManager():GetParty():GetMemberTargetIndex(0)
-    debug("myIndex=" .. (myIndex or '(nil)'));
+    debug("myIndex=" .. (myIndex or '(nil)'))
 
     if (index == myIndex) then  -- No sensible replacement if targeting yourself
         return true
     end
 
     local targets = spell.Targets
-    debug("targets=" .. (targets or '(nil)'));
+    debug("targets=" .. (targets or '(nil)'))
     local entity = AshitaCore:GetMemoryManager():GetEntity()
     debug("entity name=" .. (entity:GetName(index) or '(nil)'))
     if not entity:GetRawEntity(index) then
@@ -65,7 +62,7 @@ local function IsValidTarget(spell)
         return false
     end
     local rflags = entity:GetRenderFlags0(index)
-    debug("rflags=" .. (rflags or '(nil)'));
+    debug("rflags=" .. (rflags or '(nil)'))
     if not has_bit(rflags, 0x200) then
         debug("render flags lacks 0x200")
         return false
@@ -78,10 +75,10 @@ local function IsValidTarget(spell)
     local flags = entity:GetSpawnFlags(index)
     local allegiance = entity:GetBallistaFlags(index)
     local friendly = (allegiance == myAllegeiance)
-    debug("flags=" .. (flags or '(nil)'));
-    debug("myAllegiance=" .. (myAllegiance or '(nil)'));
-    debug("allegiance=" .. (allegiance or '(nil)'));
-    debug("friendly=" .. (friendly and 'true' or 'false'));
+    debug("flags=" .. (flags or '(nil)'))
+    debug("myAllegiance=" .. (myAllegiance or '(nil)'))
+    debug("allegiance=" .. (allegiance or '(nil)'))
+    debug("friendly=" .. (friendly and 'true' or 'false'))
 
     -- Don't target living entities for raise/tractor or dead entities for anything else..
     local health = entity:GetHPPercent(index)
@@ -149,9 +146,6 @@ local function IsValidTarget(spell)
 
     return false
 
-
-
-    
     -- -- Commented out, because a last-second cure on someone who died just before hitting the macro shouldn't target the player instead.
     -- if friendly then
     --     if ((bit.band(targets, 0x04) ~= 0) and (bit.band(flags, 0x04) ~= 0)) then  -- Party
@@ -189,27 +183,50 @@ local function IsValidTarget(spell)
 end
 
 ashita.events.register('command', 'command_cb', function (e)
-    local args = e.command:args();
+    local args = e.command:args()
     if (#args == 0) then
-        return;
+        return
     end
 
     if (string.lower(args[1]) ~= '/upcast') and (string.lower(args[1]) ~= '/up') then
-        return;
+        return
     end
-    e.blocked = true;
+    e.blocked = true
+    local mm = AshitaCore:GetMemoryManager()
+    local player = mm:GetPlayer()
+    local recast = mm:GetRecast()
+    local resources = AshitaCore:GetResourceManager()
+
+    local handlers = {
+        ma = {
+            prefix = '/ma',
+            has = function(id) return player:HasSpell(id) end,
+            getTimer = function(id) return recast:GetSpellTimer(id) end,
+            getById = function(id) return resources:GetSpellById(id) end,
+            getByName = function(name) return resources:GetSpellByName(name, 0) end,
+            checkLevel = function(resource) return CheckLevels(resource) end,
+        },
+        ja = {
+            prefix = '/ja',
+            has = function(id) return player:HasAbility(id) end,
+            getTimer = function(id) return recast:GetAbilityTimer(id) end,
+            getById = function(id) return resources:GetAbilityById(id) end,
+            getByName = function(name) return resources:GetAbilityByName(name, 0) end,
+            checkLevel = function(resource) return true end,
+        }
+    }
 
     local skip_tiers = 0       -- Number of tiers to skip (i.e. if Cure III is castable, cast Cure II instead)
     local in_cooldown = false  -- Choose the matching spell even if it's in cooldown, rather than skipping down one.
     local show_recast = false  -- Send /recast <spell> in addition to (trying to) cast it.
     local recast_only = false  -- /recast only, don't actually try to cast.
-    local spell_name = nil     -- Original spell name.
-    local spell_family = nil   -- Spell family (really spell_name lowercased)
+    local ability_name = nil   -- Original spell/ability name.
+    local ability_family = nil -- Spell/ability family (really ability_name lowercased)
     local target = nil         -- Intended spell target.
 
     for ix, arg in ipairs(args) do
         if ix ~= 1 then  -- Skip the first argument
-            arg_lower = string.lower(arg)
+            local arg_lower = string.lower(arg)
             if arg_lower == 'cd' then
                 in_cooldown = true
             elseif arg_lower == 'wr' then  -- (W)ith (R)ecast
@@ -220,90 +237,106 @@ ashita.events.register('command', 'command_cb', function (e)
             elseif arg_lower[1] == '-' then
                 skip_tiers = -tonumber(arg_lower)
                 if skip_tiers == 0 then
-                    print(chat.header('Upcast') .. chat.error("Unexpected option '" .. arg .. "'"));
+                    print(chat.header('Upcast') .. chat.error("Unexpected option '" .. arg .. "'"))
                     return
                 end
             else  -- Unknown argument, so hopefully it's the spell name.  This is the end of any and all options
-                spell_name = arg
-                spell_family = arg_lower
+                ability_name = arg
+                ability_family = arg_lower
                 target = args[ix + 1]  -- May be nil
                 break
             end
         end
     end
 
-    debug("skip_tiers=" .. skip_tiers);
-    debug("in_cooldown=" .. (in_cooldown and 'true' or 'false'));
-    debug("show_recast=" .. (show_recast and 'true' or 'false'));
-    debug("spell_name=" .. (spell_name or '(nil)'));
-    debug("spell_family=" .. (spell_family or '(nil)'));
-    debug("target=" .. (target or '(nil)'));
+    debug("skip_tiers=" .. skip_tiers)
+    debug("in_cooldown=" .. (in_cooldown and 'true' or 'false'))
+    debug("show_recast=" .. (show_recast and 'true' or 'false'))
+    debug("ability_name=" .. (ability_name or '(nil)'))
+    debug("ability_family=" .. (ability_family or '(nil)'))
+    debug("target=" .. (target or '(nil)'))
 
-    if not spell_name then
-        print(chat.header('Upcast') .. chat.error("A spell name is required."));
+    if not ability_name then
+        print(chat.header('Upcast') .. chat.error("A spell or ability name is required."))
     end
 
-    local ids = spellData[spell_family]
-    local final_spell = nil
-    local final_spell_name = nil
+    local ids = spellData[ability_family]
+    local final_ability = nil
+    local final_ability_name = nil
+    local handler = nil
     
-    local resources = AshitaCore:GetResourceManager()
     if ids then
-        local player = AshitaCore:GetMemoryManager():GetPlayer();
-        local recast = AshitaCore:GetMemoryManager():GetRecast();
-        
-        for ix = #ids, 1, -1 do
-            local id = ids[ix]
+        local type = ids.type or 'ma'
+        handler = handlers[type]
+
+        for ix, id in ipairs(ids) do
+            debug("[" .. ix .. "]=" .. id)
             -- Do they have the spell?
-            if not player:HasSpell(id) then
+            if not handler.has(id) then
+                debug("player doesn't have")
                 goto continue
             end
 
-            local resource = resources:GetSpellById(id)
+            local resource = handler.getById(id)
             -- Are they high enough level?
-            if not CheckLevels(resource) then
+            if not handler.checkLevel(resource) then
+                debug("checkLevel failed")
                 goto continue
             end
         
             -- Are we skipping tiers?
             if (skip_tiers > 0) then
                 skip_tiers = skip_tiers - 1
+                debug("skipping tiers")
                 goto continue
             end
 
             -- Is it cooling down?  Did we decide to skip that?
-            if ((not in_cooldown) and (recast:GetSpellTimer(resource.Index) ~= 0)) then
+            if ((not in_cooldown) and (handler.getTimer(id) ~= 0)) then
+                debug("in cooldown")
                 goto continue
             end
 
-            final_spell = resource
+            final_ability = resource
+            debug("Final ability name: " .. final_ability.Name[1])
             break
             ::continue::
         end
     end
-    if not final_spell then
-        -- If this point was reached, we failed to find a valid spell.  Try the original input with no upcasting shenanigans.
-        final_spell = resources:GetSpellByName(spell_name, 0)
+    if not final_ability then
+        -- If this point was reached, we failed to find a valid spell.  Try the original input with no upcasting shenanigans
+        debug("ability_name fallback = " .. ability_name)
+        for type, h in pairs(handlers) do
+            debug("trying: " .. type)
+            if not handler then
+                final_ability = h.getByName(ability_name)
+                if final_ability then
+                    handler = h
+                end
+            end
+        end
     end
-    final_spell_name = final_spell and final_spell.Name[1] or spell_name
+
+    handler = handler or handlers.ma  -- Fall back to /ma as a handler if we still failed.
+    final_ability_name = final_ability and final_ability.Name[1] or ability_name
 
     if show_recast then
-        AshitaCore:GetChatManager():QueueCommand(1, "/recast \"" .. final_spell_name .. "\"");
+        AshitaCore:GetChatManager():QueueCommand(1, "/recast \"" .. final_ability_name .. "\"")
     end
     if not target then
-        if not final_spell then
+        if not final_ability then
             target = "<t>"
         else
-            if IsValidTarget(final_spell) then
+            if IsValidTarget(final_ability) then
                 target = "<t>"
             else
                 target = "<me>"
             end
-            debug("Defaulting to " .. target) ;
+            debug("Defaulting to " .. target)
         end
     end
 
     if not recast_only then
-        AshitaCore:GetChatManager():QueueCommand(1, "/ma \"" .. final_spell_name .. "\" " .. target);
+        AshitaCore:GetChatManager():QueueCommand(1, handler.prefix .. " \"" .. final_ability_name .. "\" " .. target)
     end
-end);
+end)

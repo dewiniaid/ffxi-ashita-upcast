@@ -1,4 +1,12 @@
-local tieredSpells = T{
+-- Sources:
+--   https://github.com/Windower/Resources/blob/master/resources_data/spells.lua
+--   https://github.com/Windower/Resources/blob/master/resources_data/job_abilities.lua
+-- Mostly auto-generated, some hand additions
+
+-- Format is: spell name for /upcast (all lowercase) -> IDs in ascending order
+-- The rest of the script technically wants them in DESCENDING order, so we'll reprocess the list afterwards.
+-- type = 'ja' for job abilities or 'ma' for magic ('ma' is the default, so not specified in those cases)
+local data = T{
     ["addle"] = {286, 884},
     ["aera"] = {832, 833, 867},
     ["aero"] = {154, 155, 156, 157, 158, 851},
@@ -136,6 +144,23 @@ local tieredSpells = T{
     ["elegy"] = {421, 422, 423},
     ["march"] = {419, 420, 417},
     ["prelude"] = {401, 402},
+
+    -- JAs have IDs 512 higher than what's listed in Windower's resources for some reason.
+    ["curing waltz"] = {type='ja', 512+190, 512+191, 512+192, 512+193, 512+311},
+    ["divine waltz"] = {type='ja', 512+195, 512+262},
+    ["chocobo jig"] = {type='ja', 512+197, 512+381},
 }
 
-return tieredSpells
+-- Upcast actually wants these in reverse order for code simplification reasons, so flip them so the highest spell is first.
+for _, ids in pairs(data) do
+    local a = 1
+    local b = #ids
+
+    while a < b do
+        ids[a], ids[b] = ids[b], ids[a]
+        a = a + 1
+        b = b - 1
+    end
+end
+
+return data
