@@ -2,7 +2,7 @@ addon.name      = 'Upcast'
 addon.author    = 'Dewin'
 addon.version   = '1.1'
 addon.desc      = 'Automatically cast the highest currently known tier of the specified spell.'
-addon.link      = 'https://github.com/dewiniaid/ashita-upcast'  -- THIS LINK DOES NOT EXIST YET
+addon.link      = 'https://github.com/dewiniaid/ffxi-ashita-upcast'
 
 require('common')
 local chat = require('chat')
