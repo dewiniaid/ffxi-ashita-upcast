@@ -149,6 +149,8 @@ local data = T{
     ["curing waltz"] = {type='ja', 512+190, 512+191, 512+192, 512+193, 512+311},
     ["divine waltz"] = {type='ja', 512+195, 512+262},
     ["chocobo jig"] = {type='ja', 512+197, 512+381},
+    ["drain samba"] = {type='ja', 512+184, 512+185, 512+186},
+    ["aspir samba"] = {type='ja', 512+187, 512+188},
 }
 
 -- Upcast actually wants these in reverse order for code simplification reasons, so flip them so the highest spell is first.
